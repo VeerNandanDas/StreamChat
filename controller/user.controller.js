@@ -79,21 +79,21 @@ return res.status(200).json({ msg : "Account Created Succesfully"})
 
 const userVerify = async (req,res) =>{
 
-    //get token from url
+   try {
+   
     const { token } = req.params;
     console.log(token);
     
-    //validate token
+   
     if(!token) return res.status(400).json({msg : "Invalid token recieved"})
 
-    //find user based on token
+ 
     const verifyUser = await User.findOne({verificationToken : token});
     if(!verifyUser) return res.status(400).json({msg : "Token is Invalid"})
 
-    //set VerifiedUser feild true
     verifyUser.isVerified = true;
 
-    //remove token
+
     verifyUser.verificationToken = undefined;
 
     //save
@@ -101,13 +101,43 @@ const userVerify = async (req,res) =>{
     //return response
 
     return res.status(200).json({msg : "User is Verified"})
+    
+   } catch (error) {
+    return res.status(400).json({msg : error.message});
+   }
 }
 
 const loginser = async(req,res) => {
-    //get data
-    //compare token and check its login ability
-    //
+try {
+    const data = loginSchema.parse(req.body);
+
+    const user = await User.findOne({ email: data.email });
+    if (!user) return res.status(400).json({ msg: "Invalid Credentials" });
+
+    const isMatch = await bcrypt.compare(data.password, user.password);
+    if (!isMatch) return res.status(404).json({ msg: "Invalid Credentials" });
+
+    const token = jwt.sign({ id: user._id , role : user.role }, process.env.JWT_SECRET , { expiresIn : "5h"});
+
+    res.cookie("TOKEN", token, {
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        role: user.role,
+    }});
+
+  } catch (error) {
+    res.status(200).json({ msg: error.message });
+  }
 }
 
 
-export { registerUser , userVerify } ;
+export { registerUser , userVerify , loginser } ;
