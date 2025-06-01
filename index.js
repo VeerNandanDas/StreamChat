@@ -5,11 +5,13 @@ import db from "./utils/db.js";
 
 //import all routes
 import userRoutes from "./routes/user.routes.js"
+import cookieParser from "cookie-parser";
 
 dotenv.config();
 
-const app = express();
 
+const app = express();
+app.use(cookieParser())
 app.use(
   cors({
     origin: process.env.BASE_URL,

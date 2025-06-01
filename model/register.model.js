@@ -7,4 +7,10 @@ const registerSchema = z.object({
 
 })
 
-export { registerSchema } ;
+const loginSchema = z.object({
+    email : z.string().email("invalid email"),
+    password : z.string().min(8 , "Password must be of 8 characters"),
+
+})
+
+export { registerSchema , loginSchema} ;

@@ -1,9 +1,11 @@
-import { registerSchema } from "../model/register.model.js";
+import { registerSchema , loginSchema } from "../model/register.model.js";
 import { User } from "../model/User.model.js"
 import  bcrypt from "bcrypt"
 import  jwt  from "jsonwebtoken"
 import dotenv from "dotenv"
 import  nodemailer  from "nodemailer"
+import { text } from "express";
+import  { sendEmail } from "../utils/sendEmail.js"
 
 dotenv.config();
 
@@ -50,7 +52,7 @@ try {
 const transporter = nodemailer.createTransport({
         host: process.env.MAILTRAP_HOST,
         port: process.env.MAILTRAP_PORT,
-        secure: false, // true for 465, false for other ports
+        secure: false, // true for 2525
         auth: {
             user: process.env.MAILTRAP_USER,
             pass: process.env.MAILTRAP_PASS,
@@ -61,11 +63,23 @@ const mailOption = {
     from: process.env.MAILTRAP_MAIL,
     to: newUser.email,
     subject: "Verify your email",
-    text: `Please click to verify the Email : ${process.env.BASE_URL}/api/v1/users/verify/${token}`, // plain‑text body
+    text: `Please click to verify your Email: ${process.env.BASE_URL}/api/v1/users/verify/${token}`, // fallback for non-HTML clients
+    html: `
+        <p>Please click the link below to verify your email:</p>
+        <a href="${process.env.BASE_URL}/api/v1/users/verify/${token}" target="_blank" style="color: blue; text-decoration: underline;">
+            Verify Email
+        </a>
+    `
+};
 
+
+try {
+    let info = await transporter.sendMail(mailOption);
+    console.log("Email sent:", info.messageId);
+} catch (err) {
+    console.error("Error sending email:", err);
 }
 
-await transporter.sendMail(mailOption);
 
 
 //send succes status to user
@@ -140,4 +154,97 @@ try {
 }
 
 
-export { registerUser , userVerify , loginser } ;
+const forgotPassword = async (req,res) => {
+try {
+        const { email } = req.body;
+        const user = User.findOne({email});
+    
+        if(!user){ return res.status(404).json({msg : "User not found "})};
+    
+        //create a hash for user and store that in db and also set expire time
+        const resetToken = await jwt.sign({id : user._id } , process.env.JWT_SECRET,{ expiresIn : "15m"});
+         
+        //save in db and expiry 
+        user.resetPasswordToken = resetToken;
+        user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
+        await user.save();
+
+        //send tokne via email 
+    const resetLink = `${process.env.BASE_URL}/api/v1/users/forgotPass/${resetToken}`;
+
+    await sendEmail({
+        to:user.email,
+        from : process.env.BASE_URL,
+        text : `Click on this link to verify the email : ${resetLink}`
+    })
+
+    return res.status(200).json({ msg : "Reset link has been send "});
+
+
+} catch (error) {
+    return res.status(400).json({ msg : "error while forgetting password"})
+    
+}
+};
+
+
+const getMe = async (req,res) => {
+    const user = await User.findById(req.user.id).select('-password');
+    if(!user){ return res.status(400).json({ msg : "User Not Found"})}
+
+    res.status(200).json({
+        user,
+        success : true
+    })
+
+}
+
+
+
+const logOut = async (req,res) => {
+ 
+        res.clearCookie("token",{
+            httpOnly:true,
+            sameSite : "Strict"
+        });
+
+    return res.status(200).json({ message : "Logged out Succesfully"})
+
+}
+
+
+const resetPassword = async (req,res) => {
+
+try {
+        const { token } = req.params;
+        const { password } = req.body;
+    
+        const decoded = jwt.verify( token , process.env.JWT_SECRET);
+    
+        const user = User.findOne({
+            id : decoded.id,
+            resetPasswordToken : token,
+            resetPasswordExpires : { $gt:Date.now()}
+        });
+    
+        if(!user){ return res.status(400).json({ msg : "Invalid Token"})};
+    
+        user.password = password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+    
+        await user.save();
+    
+        return res.status(200).json({ msg : "Password has been changed "})
+} catch (error) {
+    return res.status(400).json({ msg : "Error Ocuured"})
+    
+}
+
+
+}
+
+
+
+
+export { registerUser , userVerify , loginser , getMe , logOut , resetPassword , forgotPassword } ;
