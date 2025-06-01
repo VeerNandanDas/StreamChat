@@ -189,13 +189,17 @@ try {
 
 
 const getMe = async (req,res) => {
-    const user = await User.findById(req.user.id).select('-password');
-    if(!user){ return res.status(400).json({ msg : "User Not Found"})}
-
-    res.status(200).json({
-        user,
-        success : true
-    })
+    try {
+        const user = await User.findById(req.user.id).select('-password');
+        if(!user){ return res.status(400).json({ msg : "User Not Found"})}
+    
+        res.status(200).json({
+            user,
+            success : true
+        })
+    } catch (error) {
+        return res.status(400).json({ msg : "User not found"})
+    }
 
 }
 
